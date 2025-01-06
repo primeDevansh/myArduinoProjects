@@ -9,6 +9,8 @@
 #define NO_LIGHTS 3
 #define DEBOUNCE_VAL 200  // in ms
 #define NO_STATES 5  // 0 to 4
+#define ON_STR " I " // What char/str to display while giving status of LED when it is ON
+#define OFF_STR " _ "
 
 class light {
   private:
@@ -17,81 +19,56 @@ class light {
     bool isReverse; // to check if the wiring is reverse or not
 
   public:
-    // Default ctor for initializing objects will null or equivalent values
+    // Default ctor for initializing objects with null or equivalent values
     light() {
       id = 0;
       isOn = false;
       isReverse = false;
     }
 
-    // Parameterized ctor for initializing the object.
+    // Parameterized ctor for initializing the object with real values.
     light(int idVal, bool isOnVal, bool isReverseVal = false) : id(idVal), isOn(isOnVal), isReverse(isReverseVal) {
       pinMode(id, OUTPUT);
-      if(!isReverse)
-        if(isOn)
-          digitalWrite(id, HIGH);
-        else
-          digitalWrite(id, LOW);
-
-      else
-        if(isOn)
-          digitalWrite(id, LOW);
-        else
-          digitalWrite(id, HIGH);
+      digitalWrite(id, isReverse ? !isOn : isOn);
     }
 
     void turnOn(bool toState) {
       if(isOn != toState) {
-          if(toState)
-            digitalWrite(id, isReverse ? LOW : HIGH);
-          else
-            digitalWrite(id, isReverse ? HIGH : LOW);
+        digitalWrite(id, isReverse ? !toState : toState);
         isOn = toState;
       }
     }
 
-    void status() {
+    void status(bool verbose = true) {
       // Serial.print("Light ID: ");
-      Serial.print(id);
-      Serial.print(" ");
-      Serial.println(isOn ? "ON" : "OFF");
+      if(verbose) {
+        Serial.print(id);
+        Serial.println(isOn ? ON_STR : OFF_STR);
+      }
+      else {
+        Serial.print(isOn ? ON_STR : OFF_STR);
+      }
     }
-
 };
 
 class button {
   private:
     int id;
-
-    // following vars for read() function
-    unsigned long lastPressedAtTime;
-    bool lastButtonState;
     int currentState;
 
   public:
     button() {
       id = 0;
-      lastPressedAtTime = 0;
-      lastButtonState = LOW;
+      currentState = LOW;
     }
 
     button(int idVal) : id(idVal) {
       pinMode(id, INPUT);
-      lastPressedAtTime = 0;
-      lastButtonState = LOW;
+      currentState = digitalRead(id);
     }
 
     int read() {
       currentState = digitalRead(id);
-
-      // if(currentState != lastButtonState) {
-      //   lastPressedAtTime = millis();
-      // }
-
-      // if((millis() - lastPressedAtTime) > DEBOUNCE_VAL) {
-      //   lastButtonState = currentState;
-      //   return currentState;
-      // }
       delay(DEBOUNCE_VAL);
       return currentState;
     }
@@ -121,9 +98,7 @@ void setup() {
   Button = button(11);
 
   // Give status for all lights
-  for(int i = 0; i < NO_LIGHTS; i++) {
-    Light[i].status();
-  }
+  statusAll();
 }
 
 void loop() {
@@ -133,62 +108,74 @@ void loop() {
 
 void doSomething() {
   int buttonVal = Button.read();
-  bool lightStateVal[NO_LIGHTS]; // State of light i
+  bool lightFate[NO_LIGHTS]; // Decide the fate of each light; whether it is off in a particular state or on
 
   if(buttonVal == HIGH)
     cycleState = ((cycleState + 1) % NO_STATES);
 
+  // Decide what combination of lights should turn on at what state
   switch(cycleState) {
     case 0:
       // default state
       // ON ON OFF
-      lightStateVal[0] = true;
-      lightStateVal[1] = true;
-      lightStateVal[2] = false;
+      lightFate[0] = true;
+      lightFate[1] = true;
+      lightFate[2] = false;
       break;
 
     case 1:
       // Mode 1
       // OFF OFF ON
-      lightStateVal[0] = false;
-      lightStateVal[1] = false;
-      lightStateVal[2] = true;
+      lightFate[0] = false;
+      lightFate[1] = false;
+      lightFate[2] = true;
       break;
 
     case 2:
       // Mode 2
       // ON OFF OFF
-      lightStateVal[0] = true;
-      lightStateVal[1] = false;
-      lightStateVal[2] = false;
+      lightFate[0] = true;
+      lightFate[1] = false;
+      lightFate[2] = false;
       break;
 
     case 3:
       // Mode 3
       // OFF ON OFF
-      lightStateVal[0] = false;
-      lightStateVal[1] = true;
-      lightStateVal[2] = false;
+      lightFate[0] = false;
+      lightFate[1] = true;
+      lightFate[2] = false;
       break;
 
     case 4:
       // Mode 4
       // ON ON ON
-      lightStateVal[0] = true;
-      lightStateVal[1] = true;
-      lightStateVal[2] = true;
+      lightFate[0] = true;
+      lightFate[1] = true;
+      lightFate[2] = true;
       break;
   }
 
+  // Command that light to turn on below
   for(int i = 0; i < NO_LIGHTS; i++) {
-    Light[i].turnOn(lightStateVal[i]);
-    if(prevState != cycleState) {// Do not print in case state not changes
-      Serial.print("Mode: ");
-      Serial.print(cycleState);
-      Serial.print(", ");
-      Light[i].status();
-    }
+    Light[i].turnOn(lightFate[i]);
   }
 
+  // Give status for each light if state of the setup has changed
+  // Should also print for the initial state when button hasnt been pressed yet!
+  if(cycleState != prevState) { // Do not print in case state has not changed (i.e., dont print anything unless button pressed)
+    statusAll();
+  }
+  // Give current state's value to var prevState for it to store it
   prevState = cycleState;
+}
+
+void statusAll() {
+  Serial.print("State: ");
+  Serial.print(cycleState);
+  Serial.print(" >> ");
+  for(int i = 0; i < NO_LIGHTS; i++) { 
+    Light[i].status(false);
+  }
+  Serial.println();
 }
