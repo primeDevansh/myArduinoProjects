@@ -11,6 +11,7 @@
 #define NO_STATES 5  // 0 to 4
 #define ON_STR " I " // What char/str to display while giving status of LED when it is ON
 #define OFF_STR " _ "
+#define POWER_DELAY 500  // Delay introduced to tackle power issues of relay module while state change
 
 class light {
   private:
@@ -36,6 +37,7 @@ class light {
       if(isOn != toState) {
         digitalWrite(id, isReverse ? !toState : toState);
         isOn = toState;
+        delay(POWER_DELAY);
       }
     }
 
