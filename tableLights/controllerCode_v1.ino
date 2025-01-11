@@ -3,15 +3,19 @@
  * 
  * Controller Code
  *
- * An Object-Oriented Approach
+ * An Object-Oriented Approach with memory functionality!
+ * Last state of system is stored in EEPROM before a power off.
  *
  */
+#include <EEPROM.h>
+
 #define NO_LIGHTS 3
+#define NO_STATES 5
+#define POWER_DELAY 500  // To tackle power-hungry relay module
 #define DEBOUNCE_VAL 200  // in ms
-#define NO_STATES 5  // 0 to 4
-#define ON_STR " I " // What char/str to display while giving status of LED when it is ON
+#define ON_STR " I " // What to display while giving status of LED when it is ON
 #define OFF_STR " _ "
-#define POWER_DELAY 500  // Delay introduced to tackle power issues of relay module while state change
+#define ADDR 0  // Memory address to read data from
 
 class light {
   private:
@@ -82,9 +86,20 @@ class button {
 light Light[NO_LIGHTS];
 button Button;
 
+// Knobs
+bool showDebugInfo = true;
+
 // Helper variables
 int cycleState = 0; // Current state of our light setup; Each state gives the mode of the lights
 int prevState = cycleState;
+bool readedFromMemory = false;
+
+void pickState();
+void setState(int stateVal = cycleState);
+void myDebugln(char*);
+void myDebug(char*);
+void statusAllLights();
+void updateMemory();
 
 void setup() {
   // put your setup code here, to run once:
@@ -100,7 +115,7 @@ void setup() {
   Button = button(11);
 
   // Give status for all lights
-  statusAll();
+  statusAllLights();
 }
 
 void loop() {
@@ -109,14 +124,40 @@ void loop() {
 }
 
 void doSomething() {
+  pickState();
+  setState();
+  // Give status for each light if state of the setup has changed
+  if(cycleState != prevState) {
+    // Write to memory only when state has changed
+    updateMemory();
+    // Print status only when state changes
+    statusAllLights();
+  }
+  // Give current state's value to var prevState for it to store it
+  prevState = cycleState;
+}
+
+void pickState() {
   int buttonVal = Button.read();
-  bool lightFate[NO_LIGHTS]; // Decide the fate of each light; whether it is off in a particular state or on
+  myDebugln("Buttton value read – DONE");
 
-  if(buttonVal == HIGH)
+  if(!readedFromMemory) {
+    cycleState = EEPROM.read(ADDR);
+    myDebugln("Historical state from memory read and updated – DONE");
+    readedFromMemory = true;
+  }
+
+  if(buttonVal == HIGH) {
+    myDebugln("Button pressed");
     cycleState = ((cycleState + 1) % NO_STATES);
+    myDebugln("Cycle state var changed and updated – DONE");
+  }
+}
 
+void setState(int stateVal = cycleState) {
+  bool lightFate[NO_LIGHTS]; // Decide the light is on/off in a particular state
   // Decide what combination of lights should turn on at what state
-  switch(cycleState) {
+  switch(stateVal) {
     case 0:
       // default state
       // ON ON OFF
@@ -161,18 +202,16 @@ void doSomething() {
   // Command that light to turn on below
   for(int i = 0; i < NO_LIGHTS; i++) {
     Light[i].turnOn(lightFate[i]);
+    myDebugln("Light fate changed");
   }
-
-  // Give status for each light if state of the setup has changed
-  // Should also print for the initial state when button hasnt been pressed yet!
-  if(cycleState != prevState) { // Do not print in case state has not changed (i.e., dont print anything unless button pressed)
-    statusAll();
-  }
-  // Give current state's value to var prevState for it to store it
-  prevState = cycleState;
 }
 
-void statusAll() {
+void updateMemory() {
+  EEPROM.write(ADDR, cycleState);
+    myDebugln("Written state change to memory");
+}
+
+void statusAllLights() {
   Serial.print("State: ");
   Serial.print(cycleState);
   Serial.print(" >> ");
@@ -180,4 +219,14 @@ void statusAll() {
     Light[i].status(false);
   }
   Serial.println();
+}
+
+void myDebugln(char* str) {
+  if(showDebugInfo == true)
+    Serial.println(str);
+}
+
+void myDebug(char* str) {
+  if(showDebugInfo)
+    Serial.print(str);
 }
